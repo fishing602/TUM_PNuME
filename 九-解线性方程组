@@ -1,0 +1,118 @@
+%用tic，toc来表示计算过程所花的时间
+
+tic;
+clear;
+r=0.02;b=0.3;h=0.3;
+nodes=[0 0;b/3 0;2*b/3 0;b 0;
+       0 h/3;b/3 h/3;2*b/3 h/3;b h/3;
+       0 2*h/3;b/3 2*h/3;2*b/3 2*h/3;b-r*sin(pi/6) h-r*cos(pi/6);
+       b h-r;b-r*cos(pi/6) h-r*sin(pi/6);0 h;b/3 h;
+       b/2 h;b-r h];
+elements=[1 2 6 5;2 3 7 6;3 4 8 7;5 6 10 9;6 7 11 10;11 7 12 14;
+          7 8 13 12;9 10 16 15;10 11 17 16;11 14 18 17];
+dbc=[1 600;2 600;3 600;4 600;
+     12 300;13 300;14 300;18 300];
+ sysmat=zeros(18,18);rhs=zeros(18,1);
+for n=1:size(elements,1)
+     [elemat,elevec] = evaluate_stat(nodes(elements(n,:),:),gx2dref(2),gw2dref(2));
+     [sysmat,rhs] = assemble(elemat,elevec,sysmat,rhs,elements(n,:));
+end
+[sysmat,rhs] = assignDBC(sysmat,rhs,dbc);
+k=[];
+
+ tic;
+ T=sysmat\rhs;
+ k(1)=toc;
+
+ tic
+ T=solveGauss(sysmat,rhs);
+ k(2)=toc;
+
+ tic
+ T=solveG(sysmat,rhs,zeros(size(rhs)),1e-7, 1000);
+ k(3)=toc;
+
+ tic
+ T=solveCG(sysmat,rhs,zeros(size(rhs)),1e-7, 1000);
+ k(4)=toc;
+% quadplot(nodes,elements,T)
+% shading interp; grid on
+% colormap(hot);
+% colorbar
+toc;
+%题目后面还有一问就是用构造出来的函数去解方程，把题目给的矩阵用Matlab构造出来，然后直接解方程就可以了
+
+s=[10.0, 6.0, 5.1, 5.01, 5.001, 5.00001, 5.0000001, 5.000000001, 5.00000000001];
+v=s(1,1)*ones(1,300);
+a=-2*ones(1,299);
+A1=diag(v);
+A2=diag(a,-1);
+A3=diag(a,1);
+A=A1+A2+A3;
+A(1,1)=1;
+b=ones(300,1);
+tic;
+x=solveGauss(A,b);
+%x=solveCG(A,b,x0,1e-7,10000)
+%x=solveG(A,b,x0,1e-7,10000)
+t=toc;
+
+
+用到的函数：
+% Gauß’sches Eliminationsverfahren
+
+function x=solveGauss(A,b)
+n=size(A,1);
+x=zeros(n,1);
+for j=1:n-1
+    for i=j+1:n
+        mul=A(i,j)/A(j,j);
+        A(i,:)=A(i,:)-mul*A(j,:);
+        b(i)=b(i)-mul*b(j);
+    end
+end
+for i=n:-1:1
+    sum=0;
+    for j=n:-1:i+1
+        sum=sum+x(j)*A(i,j);
+    end
+x(i)=(b(i)-sum)/A(i,i);
+end
+end
+
+
+%Gradienten-Methode
+
+function [x,k]=solveG(A,b,x0,rtol,itermax)
+x=x0;
+k=0;
+r0=b-A*x;
+r=r0;
+while norm(r,2)>rtol&& k<itermax
+      v=A*r;
+      alpha=(r'*r)/(r'*v);
+      x=x+alpha*r;
+      r=r-alpha*v;
+      k=k+1;
+end
+end
+
+
+%Konjugierte-Gradienten-Methode
+
+function [x,k]=solveCG(A,b,x0,rtol,itermax)
+k=0;
+x=x0;
+r1=b-A*x0;
+p=r1;
+while norm(r1)>rtol && k<itermax
+      v=A*p;
+      alpha=(r1'*r1)/(p'*v)
+      x=x+alpha*p;
+      r2=r1-alpha*v;
+      belta=(r2'*r2)/(r1'*r1);
+      p=r2+belta*p;
+      r1=r2;
+      k=k+1;
+end
+end
