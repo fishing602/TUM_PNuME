@@ -1,0 +1,179 @@
+%和求解静态热传导方程不同的是，动态代表温度会随时间而变化，这就要用到之前学的几个初值函数
+clear;
+r=0.02;
+b=0.3;
+h=0.3;
+ts=5000;
+t=0:500:5000;
+eleosol=300*ones(18,1);
+timInt_m=1;
+timestep=500;
+theta=0.5;
+firststep=1;
+T(:,1)=300*ones(18,1);
+elesol=300*ones(18,1);
+nodes=[0 0;b/3 0;2*b/3 0;b 0;
+       0 h/3;b/3 h/3;2*b/3 h/3;b h/3;
+       0 2*h/3;b/3 2*h/3;2*b/3 2*h/3;b-r*sin(pi/6) h-r*cos(pi/6);
+       b h-r;b-r*cos(pi/6) h-r*sin(pi/6);0 h;b/3 h;
+       b/2 h;b-r h];
+elements=[1 2 6 5;2 3 7 6;3 4 8 7;5 6 10 9;6 7 11 10;11 7 12 14;
+          7 8 13 12;9 10 16 15;10 11 17 16;11 14 18 17];
+dbc=[1 600;2 600;3 600;4 600;
+     12 300;13 300;14 300;18 300];
+for i=1:length(t)-1
+    sysmat=zeros(18,18);
+    rhs=zeros(18,1);
+    for n=1:size(elements,1)
+        [elemat,elevec]=evaluate_instat(nodes(elements(n,:),:),gx2dref(2),gw2dref(2),elesol(elements(n,:)),eleosol,timInt_m,timestep,theta,firststep);
+        [sysmat,rhs]=assemble(elemat,elevec,sysmat,rhs,elements(n,:));
+    end
+[sysmat,rhs]=assignDBC(sysmat,rhs,dbc); % Dirichlet boundary condition
+T(:,i+1)=sysmat\rhs;
+% elesol=T(:,i+1);
+% end
+% quadplot(nodes,elements,T(:,length(t)));
+% shading interp;
+% grid on;
+% colormap(hot);
+% colorbar
+%有的时候一些边界的点的温度要求不能超过多少，这时候可以添加一个判定条件，当然也可以直接在上面生成的矩阵里面看在什么时候这个温度超过了
+
+elesol=T(:,i+1);%代码一直到这里是一样的
+if T(15,i+1)>=450|T(16,i+1)>=450|T(17,i+1)>=450|T(18,i+1)>=450
+   break
+end
+end
+zeit=t(i+1);
+quadplot(nodes,elements,T(:,i+1));
+shading interp;
+grid on;
+colormap(hot);
+colorbar
+
+%求具体的T：例如求出的T值是5000s时的，那就要取第11列的值
+
+用到的函数：
+function [LHS, RHS] = OST(theta, timestep, M, B, C, sol) %Kapitel6的13页
+
+if size(M) == 1
+
+LHS = M - theta * timestep * B(1);
+
+RHS = (M + (1 - theta) * timestep * B(2)) * sol + timestep * (theta * C(1) + (1 - theta) * C(2));
+
+else
+
+LHS = M - theta * timestep * B;
+
+RHS = (M + (1 - theta) * timestep * B) * sol + timestep * (theta * C + (1 - theta) * C);
+
+end
+%之前B和C都是数组元素引用，但这里是矩阵，B(1)B(2)在这里都是B，同时动态热传导方程里面的C是恒为0
+
+
+%在写题目之前先写一个函数
+
+function [elemat,elevec]=evaluate_instat(elenodes,gpx,gpw,elesol,eleosol,timInt_m,timestep,theta,firststep)
+elemat=zeros(4,4);
+lamda=48;
+p=7800;
+c=452;
+M=zeros(4,4);
+B=zeros(4,4);
+for i=1:4
+   for j=1:4
+      s1=0;
+      s2=0;
+      for k=1:size(gpw)
+          xi=gpx(k,1);
+          eta=gpx(k,2);
+          deriv=linquadderivref(xi,eta);
+          val=linquadref(xi,eta);
+          [J,detJ,invJ]=getJacobian(elenodes,xi,eta);
+          Nv=val(i,:);
+          Nt=val(j,:);
+          gNv=deriv(i,:)*invJ  %gNv gradient of N
+          gNt=deriv(j,:)*invJ  
+          s1=s1+p*c*Nv*Nt*detJ*gpw(k);
+          s2=s2+lamda*dot(gNv,gNt)*detJ*gpw(k);
+      end
+   M(i,j)=s1;
+   B(i,j)=-s2
+   % [LHS(i,j),RHS(i)] = OST(0.66,1000,M(i,j),[B(i,j),B(i,j)],[0,0],elesol(i))
+end
+C=0;
+if timInt_m==1
+   if timInt_m==1
+    [LHS,RHS] = OST(theta,timestep,M,B,C,elesol);
+elseif timInt_m==2
+    [LHS,RHS] = AB2(timestep,M,B,C,[elesol,eleosol]);
+elseif timInt_m==3
+    [LHS,RHS] = AM3(timestep,M,B,C,[elesol,eleosol]);
+elseif timInt_m==4
+    [LHS,RHS] = BDF2(timestep,M,B,C,[elesol,eleosol]);
+else
+    disp('false')
+end
+elemat=LHS;
+elevec=RHS;
+end
+
+end
+
+
+function [LHS,RHS] = AB2(timestep,M,B,C,sol)
+LHS=M;
+RHS=(M+3/2*timestep*B(1))*sol(1)+timestep/2*(3*C(1)-B(2)*sol(2)-C(2));
+end
+
+
+function [LHS,RHS] = AM3(timestep,M,B,C,sol)
+LHS=M-5/12*timestep*B(1);
+RHS=(M+2/3*timestep*B(2))*sol(1)+timestep/12*(5*C(1)+8*C(2)-B(3)*sol(2)-C(3));
+end
+
+
+function [LHS,RHS] = BDF2(timestep,M,B,C,sol)
+LHS=3/2*M-timestep*B;
+RHS=2*M*sol(1)-1/2*M*sol(2)+timestep*C;
+end
+
+
+function gaussw = gw2dref(n)
+w_1 = 5/9;
+w_2 = 8/9;
+if n == 1
+    gaussw = [4.0];
+elseif n == 2
+    gaussw = [1.0; 1.0; 1.0; 1.0];
+elseif n == 3
+    gaussw = [w_1*w_1; w_1*w_2; w_1*w_1; w_1*w_2; w_2*w_2; w_1*w_2; w_1*w_1; w_1*w_2; w_1*w_1];
+else
+    disp('false n')
+end
+
+
+function gaussx = gx2dref(n)
+if n == 1
+    gaussx = [0, 0];
+elseif n == 2
+    gaussx = [-1/sqrt(3), -1/sqrt(3); -1/sqrt(3), 1/sqrt(3); 1/sqrt(3), -1/sqrt(3); 1/sqrt(3), 1/sqrt(3)];
+elseif n == 3
+    k = sqrt(3/5);
+    gaussx = [-k, -k; -k, 0; -k, k; 0, -k; 0, 0; 0, k; k, -k; k, 0; k, k];
+else
+    disp('false n')
+end
+
+
+function deriv = linquadderiref(x_i, eta)
+deriv(1, 1) = -1/4 * (1 - eta);
+deriv(1, 2) = -1/4 * (1 - x_i);
+deriv(2, 1) = 1/4 * (1 - eta);
+deriv(2, 2) = -1/4 * (1 + x_i);
+deriv(3, 1) = 1/4 * (1 + eta);
+deriv(3, 2) = 1/4 * (1 + x_i);
+deriv(4, 1) = -1/4 * (1 + eta);
+deriv(4, 2) = 1/4 * (1 - x_i);
+end
