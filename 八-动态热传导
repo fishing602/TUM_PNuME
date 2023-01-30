@@ -177,3 +177,65 @@ deriv(3, 2) = 1/4 * (1 + x_i);
 deriv(4, 1) = -1/4 * (1 + eta);
 deriv(4, 2) = 1/4 * (1 - x_i);
 end
+
+
+function [sysmat,rhs]=assemble(elemat,elevec,sysmat,rhs,ele)
+%ele是local 1234对应到global
+a=zeros(size(sysmat));
+b=zeros(size(rhs));
+for i=1:4
+    for j=1:4
+    a(ele(i),ele(j))=elemat(i,j);
+    end
+    b(ele(i))=elevec(i);
+end
+sysmat=sysmat+a;
+rhs=rhs+b
+end
+
+
+function [sysmat,rhs]=assignDBC(sysmat,rhs,dbc)
+%dbc是一个两列的矩阵，第一列代表节点位置，第二列代表该节点对应的边界温度
+a=size(dbc,1);
+%返回该矩阵的行数
+for i=1:a
+    sysmat(dbc(i,1),:)=0;
+    %有边界温度的这一行先全部用零替换
+    sysmat(dbc(i,1),dbc(i,1))=1;
+    %dbc温度所在的节点用1替换
+    rhs(dbc(i,1))=dbc(i,2);
+    %把dbc的值放入rhs
+end
+end
+
+
+function[J,detJ,invJ]=getJacobian(nodes,xi,eta)
+Jt=linquadderivref(xi,eta)'*nodes;
+J=Jt';
+detJ=det(J);
+invJ=inv(J);
+end
+
+
+function deriv=linquadderivref(xi,eta)
+         deriv=[-1/4*(1-eta),-1/4*(1-xi)
+                1/4*(1-eta), -1/4*(1+xi)
+                1/4*(1+eta),1/4*(1+xi)
+                -1/4*(1+eta),1/4*(1-xi)];
+end
+
+
+function quadplot(nodes,elements,sol)
+Zeile=size(elements,1);
+x=nodes(:,1);
+y=nodes(:,2);
+z=sol;
+T=zeros(2*Zeile,3);
+%把平面上的一个四边形elements切割成2个三角形，所以是2*Zeile,再转化到三维空间去,一个四边形的elements包含四个点，切割成两个三角形之后，每个三角形包含三个点。
+ for i=1:size(elements,1)
+    T(2*i-1,:)=[elements(i,1:2),elements(i,4)];
+    T(2*i,:)=[elements(i,2:4)];
+ end
+trisurf(T,x,y,z);
+xlabel('X'),ylabel('Y'),zlabel('Z');
+end
