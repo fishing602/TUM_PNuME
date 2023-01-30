@@ -35,10 +35,10 @@ k=[];
  tic
  T=solveCG(sysmat,rhs,zeros(size(rhs)),1e-7, 1000);
  k(4)=toc;
-% quadplot(nodes,elements,T)
-% shading interp; grid on
-% colormap(hot);
-% colorbar
+quadplot(nodes,elements,T)
+shading interp; grid on
+colormap(hot);
+colorbar
 toc;
 %题目后面还有一问就是用构造出来的函数去解方程，把题目给的矩阵用Matlab构造出来，然后直接解方程就可以了
 
@@ -53,67 +53,127 @@ A(1,1)=1;
 b=ones(300,1);
 x0=zeros(300,1);
 tic;
-x=solveGauss(A,b);
-%x=solveCG(A,b,x0,1e-7,10000)
-%x=solveG(A,b,x0,1e-7,10000)
+%x=solveGauss(A,b);
+%[x,k]=solveCG(A,b,x0,1e-7,10000)
+[x,k]=solveG(A,b,x0,1e-7,10000)
 t=toc;
 
 
 用到的函数：
-% Gauß’sches Eliminationsverfahren
 
-function x=solveGauss(A,b)
-n=size(A,1);
-x=zeros(n,1);
-for j=1:n-1
-    for i=j+1:n
-        mul=A(i,j)/A(j,j);
-        A(i,:)=A(i,:)-mul*A(j,:);
-        b(i)=b(i)-mul*b(j);
+%首先要用到一个三维画图的函数，在三维空间中用三角形连接。
+function quadplot(nodes,elements,sol)
+Zeile=size(elements,1);
+x=nodes(:,1);
+y=nodes(:,2);
+z=sol;
+T=zeros(2*Zeile,3);
+%把平面上的一个四边形elements切割成2个三角形，所以是2*Zeile,再转化到三维空间去,一个四边形的elements包含四个点，切割成两个三角形之后，每个三角形包含三个点。
+ for i=1:size(elements,1)
+    T(2*i-1,:)=[elements(i,1:2),elements(i,4)];
+    T(2*i,:)=[elements(i,2:4)];
+ end
+trisurf(T,x,y,z);
+xlabel('X'),ylabel('Y'),zlabel('Z');
+end
+
+
+
+%下一步要做的就是把这些elemat从lokal变成global，就是进行一下坐标变换
+function [sysmat,rhs]=assemble(elemat,elevec,sysmat,rhs,ele)
+%ele是local 1234对应到global
+a=zeros(size(sysmat));
+b=zeros(size(rhs));
+for i=1:4
+    for j=1:4
+    a(ele(i),ele(j))=elemat(i,j);
     end
+    b(ele(i))=elevec(i);
 end
-for i=n:-1:1
-    sum=0;
-    for j=n:-1:i+1
-        sum=sum+x(j)*A(i,j);
-    end
-x(i)=(b(i)-sum)/A(i,i);
-end
+sysmat=sysmat+a;
+rhs=rhs+b
 end
 
+%接着就是处理边界温度了，我们要解的方程是AT=0，解出T矩阵，但如果有边界温度的话，AT就不等于0矩阵了，具体看课件22页举的例子。
 
-%Gradienten-Methode
-
-function [x,k]=solveG(A,b,x0,rtol,itermax)
-x=x0;
-k=0;
-r0=b-A*x;
-r=r0;
-while norm(r,2)>rtol&& k<itermax
-      v=A*r;
-      alpha=(r'*r)/(r'*v);
-      x=x+alpha*r;
-      r=r-alpha*v;
-      k=k+1;
+function [sysmat,rhs]=assignDBC(sysmat,rhs,dbc)
+%dbc是一个两列的矩阵，第一列代表节点位置，第二列代表该节点对应的边界温度
+a=size(dbc,1);
+%返回该矩阵的行数
+for i=1:a
+    sysmat(dbc(i,1),:)=0;
+    %有边界温度的这一行先全部用零替换
+    sysmat(dbc(i,1),dbc(i,1))=1;
+    %dbc温度所在的节点用1替换
+    rhs(dbc(i,1))=dbc(i,2);
+    %把dbc的值放入rhs
 end
 end
 
 
-%Konjugierte-Gradienten-Methode
-
-function [x,k]=solveCG(A,b,x0,rtol,itermax)
-k=0;
-x=x0;
-r1=b-A*x0;
-p=r1;
-while norm(r1)>rtol && k<itermax
-      v=A*p;
-      alpha=(r1'*r1)/(p'*v)
-      x=x+alpha*p;
-      r2=r1-alpha*v;
-      belta=(r2'*r2)/(r1'*r1);
-      p=r2+belta*p;
-      r1=r2;
-      k=k+1;
+%看函数表达式，我们先要做的是将elements一个一个求解出来，看课件的讲解，一个element有四个点，所以我们求出来的elemat是一个4x4的矩阵
+function [elemat,elevec]=evaluate_stat(elenodes,gx2dref,gw2dref)
+elemat=zeros(4,4);
+%按照公式右边，求出来的是一个一个的值，然后把一个一个的值代入这个4x4的零矩阵
+lamda=48;
+%一个常数，题目会给的
+for k=1:4
+   for i=1:4
+       s=0;%求的这些值是一个一个的累加，所以需要设置一个初值
+       for j=1:size(gw2dref);%要循环所有的高斯点
+           xi=gx2dref(j,1);
+           eta=gx2dref(j,2);
+           deriv=linquadderivref(xi,eta);
+          [J,detJ,invJ]=getJacobian(elenodes,xi,eta);
+          Nv=deriv(k,:)*invJ;
+          Nt=deriv(i,:)*invJ;
+          s=s+lamda*dot(Nv,Nt)*detJ*gw2dref(j);
+      end
+   elemat(k,i)=s;
+  end
 end
+elevec=zeros(4,1);
+end
+
+
+function[J,detJ,invJ]=getJacobian(nodes,xi,eta)
+Jt=linquadderivref(xi,eta)'*nodes;
+J=Jt';
+detJ=det(J);
+invJ=inv(J);
+end
+
+
+function gaussw = gw2dref(n)
+w_1 = 5/9;
+w_2 = 8/9;
+if n == 1
+    gaussw = [4.0];
+elseif n == 2
+    gaussw = [1.0; 1.0; 1.0; 1.0];
+elseif n == 3
+    gaussw = [w_1*w_1; w_1*w_2; w_1*w_1; w_1*w_2; w_2*w_2; w_1*w_2; w_1*w_1; w_1*w_2; w_1*w_1];
+else
+    disp('false n')
+end
+
+
+function gaussx = gx2dref(n)
+if n == 1
+    gaussx = [0, 0];
+elseif n == 2
+    gaussx = [-1/sqrt(3), -1/sqrt(3); -1/sqrt(3), 1/sqrt(3); 1/sqrt(3), -1/sqrt(3); 1/sqrt(3), 1/sqrt(3)];
+elseif n == 3
+    k = sqrt(3/5);
+    gaussx = [-k, -k; -k, 0; -k, k; 0, -k; 0, 0; 0, k; k, -k; k, 0; k, k];
+else
+    disp('false n')
+end
+
+
+function deriv=linquadderivref(xi,eta)
+         deriv=[-1/4*(1-eta),-1/4*(1-xi)
+                1/4*(1-eta), -1/4*(1+xi)
+                1/4*(1+eta),1/4*(1+xi)
+                -1/4*(1+eta),1/4*(1-xi)];
 end
