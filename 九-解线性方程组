@@ -177,3 +177,64 @@ function deriv=linquadderivref(xi,eta)
                 1/4*(1+eta),1/4*(1+xi)
                 -1/4*(1+eta),1/4*(1-xi)];
 end
+
+
+% Gauß’sches Eliminationsverfahren
+
+function x=solveGauss(A,b)
+n=size(A,1);
+x=zeros(n,1);
+for j=1:n-1
+    for i=j+1:n
+        mul=A(i,j)/A(j,j);
+        A(i,:)=A(i,:)-mul*A(j,:);
+        b(i)=b(i)-mul*b(j);
+    end
+end
+for i=n:-1:1
+    sum=0;
+    for j=n:-1:i+1
+        sum=sum+x(j)*A(i,j);
+    end
+x(i)=(b(i)-sum)/A(i,i);
+end
+end
+
+
+
+%Gradienten-Methode
+
+function [x,k]=solveG(A,b,x0,rtol,itermax)
+x=x0;
+k=0;
+r0=b-A*x;
+r=r0;
+while norm(r,2)>rtol&& k<itermax
+      v=A*r;
+      alpha=(r'*r)/(r'*v);
+      x=x+alpha*r;
+      r=r-alpha*v;
+      k=k+1;
+end
+end
+
+
+
+%Konjugierte-Gradienten-Methode
+
+function [x,k]=solveCG(A,b,x0,rtol,itermax)
+k=0;
+x=x0;
+r1=b-A*x0;
+p=r1;
+while norm(r1)>rtol && k<itermax
+      v=A*p;
+      alpha=(r1'*r1)/(p'*v);
+      x=x+alpha*p;
+      r2=r1-alpha*v;
+      belta=(r2'*r2)/(r1'*r1);
+      p=r2+belta*p;
+      r1=r2;
+      k=k+1;
+end
+end
