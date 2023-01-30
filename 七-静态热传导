@@ -18,7 +18,7 @@
 % %一共有18个点组成
 % for n=1:size(elements,1)
 %     %一共有size(elements,1)个elements，这里是10个
-%     [elemat,elevec]=evaluate_stat((nodes(elements(n,:),:),:),gx2dref(2),gw3dref(2));
+%     [elemat,elevec]=evaluate_stat((nodes(elements(n,:),:),:),gx2dref(2),gw2dref(2));
 %     %这里是把每个element对应的点代入进行运算
 %     [sysmat,rhs]=assemble(elemat,elevec,sysmat,rhs,elements(n,:));
 %     %每个element在local对应的是1 2 3 4个点，但在global就不是了，看给的图就明白了，直接给出了每个element的四个点在global对应的点编号。
