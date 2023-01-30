@@ -51,6 +51,7 @@ A3=diag(a,1);
 A=A1+A2+A3;
 A(1,1)=1;
 b=ones(300,1);
+x0=zeros(300,1);
 tic;
 x=solveGauss(A,b);
 %x=solveCG(A,b,x0,1e-7,10000)
